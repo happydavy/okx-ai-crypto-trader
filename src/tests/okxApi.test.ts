@@ -6,7 +6,7 @@ import { credentialsService } from '../services/credentialsService';
 
 // Mock axios
 vi.mock('axios');
-const mockedAxios = vi.mocked(axios);
+const mockedAxios = axios as any;
 
 // Mock Supabase
 vi.mock('@/integrations/supabase/client', () => ({
@@ -38,6 +38,9 @@ describe('OKX API 连接测试', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // Setup axios mock
+    mockedAxios.get = vi.fn();
+    mockedAxios.post = vi.fn();
     okxApi.setCredentials(testCredentials);
   });
 
@@ -111,7 +114,7 @@ describe('OKX API 连接测试', () => {
       
       expect(result.isValid).toBe(true);
       expect(mockedAxios.get).toHaveBeenCalledWith(
-        'https://us.okx.com/api/v5/account/balance',
+        'https://www.okx.com/api/v5/account/balance',
         expect.objectContaining({
           headers: expect.objectContaining({
             'OK-ACCESS-KEY': testCredentials.apiKey,
@@ -216,7 +219,7 @@ describe('OKX API 连接测试', () => {
       
       expect(result).toEqual(mockMarketData);
       expect(mockedAxios.get).toHaveBeenCalledWith(
-        'https://us.okx.com/api/v5/market/ticker',
+        'https://www.okx.com/api/v5/market/ticker',
         { params: { instId: 'BTC-USDT' } }
       );
     });
@@ -267,7 +270,7 @@ describe('OKX API 连接测试', () => {
       
       expect(result).toEqual(mockBalance);
       expect(mockedAxios.get).toHaveBeenCalledWith(
-        'https://us.okx.com/api/v5/account/balance',
+        'https://www.okx.com/api/v5/account/balance',
         expect.objectContaining({
           headers: expect.objectContaining({
             'OK-ACCESS-KEY': testCredentials.apiKey,
@@ -290,14 +293,18 @@ describe('OKX API 连接测试', () => {
 
       await okxApi.verifyCredentials();
 
-      const callArgs = mockedAxios.get.mock.calls[0];
-      const headers = callArgs[1]?.headers;
-
-      expect(headers).toHaveProperty('OK-ACCESS-KEY', testCredentials.apiKey);
-      expect(headers).toHaveProperty('OK-ACCESS-PASSPHRASE', testCredentials.passphrase);
-      expect(headers).toHaveProperty('OK-ACCESS-SIGN');
-      expect(headers).toHaveProperty('OK-ACCESS-TIMESTAMP');
-      expect(headers).toHaveProperty('Content-Type', 'application/json');
+      expect(mockedAxios.get).toHaveBeenCalledWith(
+        'https://www.okx.com/api/v5/account/balance',
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'OK-ACCESS-KEY': testCredentials.apiKey,
+            'OK-ACCESS-PASSPHRASE': testCredentials.passphrase,
+            'OK-ACCESS-SIGN': expect.any(String),
+            'OK-ACCESS-TIMESTAMP': expect.any(String),
+            'Content-Type': 'application/json'
+          })
+        })
+      );
     });
   });
 });
