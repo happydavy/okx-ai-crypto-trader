@@ -73,8 +73,15 @@ class OKXApiService {
   private generateSignature(timestamp: string, method: string, requestPath: string, body: string = ''): string {
     if (!this.credentials) throw new Error('API credentials not set');
     
-    const message = timestamp + method + requestPath + body;
-    return CryptoJS.enc.Base64.stringify(CryptoJS.HmacSHA256(message, this.credentials.secretKey));
+    const message = timestamp + method.toUpperCase() + requestPath + body;
+    console.log('Signature message:', message);
+    
+    const signature = CryptoJS.enc.Base64.stringify(
+      CryptoJS.HmacSHA256(message, this.credentials.secretKey)
+    );
+    
+    console.log('Generated signature:', signature);
+    return signature;
   }
 
   private getHeaders(method: string, requestPath: string, body: string = ''): Record<string, string> {
@@ -83,13 +90,16 @@ class OKXApiService {
     const timestamp = new Date().toISOString();
     const signature = this.generateSignature(timestamp, method, requestPath, body);
 
-    return {
+    const headers = {
       'OK-ACCESS-KEY': this.credentials.apiKey,
       'OK-ACCESS-SIGN': signature,
       'OK-ACCESS-TIMESTAMP': timestamp,
       'OK-ACCESS-PASSPHRASE': this.credentials.passphrase,
       'Content-Type': 'application/json',
     };
+
+    console.log('Request headers:', headers);
+    return headers;
   }
 
   async verifyCredentials(): Promise<{ isValid: boolean; error?: string }> {
@@ -97,36 +107,58 @@ class OKXApiService {
       return { isValid: false, error: 'API credentials not set' };
     }
 
+    console.log('Verifying credentials for API key:', this.credentials.apiKey);
+
     try {
       const requestPath = '/api/v5/account/balance';
       const headers = this.getHeaders('GET', requestPath);
       
+      console.log('Making verification request to:', `${this.baseURL}${requestPath}`);
+      
       const response = await axios.get(`${this.baseURL}${requestPath}`, { 
         headers,
-        timeout: 10000 // 10 second timeout
+        timeout: 15000 // Increased timeout
       });
+      
+      console.log('Verification response:', response.data);
       
       if (response.data.code === '0') {
         return { isValid: true };
       } else {
         return { 
           isValid: false, 
-          error: response.data.msg || 'Invalid API credentials'
+          error: `API Error: ${response.data.msg || 'Invalid API credentials'} (Code: ${response.data.code})`
         };
       }
     } catch (error: any) {
       console.error('API verification error:', error);
       
-      if (error.response?.status === 401) {
-        return { isValid: false, error: 'Invalid API credentials' };
-      } else if (error.response?.status === 403) {
-        return { isValid: false, error: 'API key lacks required permissions' };
+      if (error.response) {
+        const errorData = error.response.data;
+        console.log('Error response data:', errorData);
+        
+        if (error.response.status === 401) {
+          return { 
+            isValid: false, 
+            error: `认证失败: ${errorData?.msg || 'API密钥无效或权限不足'}` 
+          };
+        } else if (error.response.status === 403) {
+          return { 
+            isValid: false, 
+            error: 'API密钥缺少必要权限，请确保已开启读取权限' 
+          };
+        } else {
+          return { 
+            isValid: false, 
+            error: `API错误: ${errorData?.msg || '验证失败'} (状态码: ${error.response.status})`
+          };
+        }
       } else if (error.code === 'ENOTFOUND' || error.code === 'ETIMEDOUT') {
-        return { isValid: false, error: 'Network connection failed' };
+        return { isValid: false, error: '网络连接失败，请检查网络设置' };
       } else {
         return { 
           isValid: false, 
-          error: error.response?.data?.msg || 'API verification failed'
+          error: `验证过程中发生错误: ${error.message}`
         };
       }
     }
