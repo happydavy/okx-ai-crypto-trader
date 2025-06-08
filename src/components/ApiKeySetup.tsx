@@ -6,8 +6,8 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { EyeIcon, EyeOffIcon } from 'lucide-react';
-import { OKXCredentials } from '@/services/okxApi';
+import { EyeIcon, EyeOffIcon, Loader2 } from 'lucide-react';
+import { OKXCredentials, okxApi } from '@/services/okxApi';
 
 interface ApiKeySetupProps {
   onCredentialsSet: (credentials: OKXCredentials) => void;
@@ -22,19 +22,62 @@ export const ApiKeySetup = ({ onCredentialsSet, credentials }: ApiKeySetupProps)
     sandbox: credentials?.sandbox || false
   });
   const [showSecrets, setShowSecrets] = useState(false);
-  const [isValid, setIsValid] = useState(false);
+  const [verificationStatus, setVerificationStatus] = useState<{
+    isVerifying: boolean;
+    isValid: boolean | null;
+    error?: string;
+  }>({
+    isVerifying: false,
+    isValid: null
+  });
+
+  const handleVerify = async () => {
+    if (!formData.apiKey || !formData.secretKey || !formData.passphrase) {
+      setVerificationStatus({
+        isVerifying: false,
+        isValid: false,
+        error: '请填写所有必需字段'
+      });
+      return;
+    }
+
+    setVerificationStatus({ isVerifying: true, isValid: null });
+    
+    // Set credentials temporarily for verification
+    okxApi.setCredentials(formData);
+    
+    try {
+      const result = await okxApi.verifyCredentials();
+      setVerificationStatus({
+        isVerifying: false,
+        isValid: result.isValid,
+        error: result.error
+      });
+    } catch (error) {
+      setVerificationStatus({
+        isVerifying: false,
+        isValid: false,
+        error: '验证过程中发生错误'
+      });
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (formData.apiKey && formData.secretKey && formData.passphrase) {
-      setIsValid(true);
+    if (verificationStatus.isValid) {
       onCredentialsSet(formData);
+    } else {
+      handleVerify();
     }
   };
 
   const handleInputChange = (field: keyof OKXCredentials, value: string | boolean) => {
     setFormData(prev => ({ ...prev, [field]: value }));
+    // Reset verification status when credentials change
+    setVerificationStatus({ isVerifying: false, isValid: null });
   };
+
+  const isFormValid = formData.apiKey && formData.secretKey && formData.passphrase;
 
   return (
     <Card className="w-full max-w-md mx-auto glass-effect">
@@ -102,7 +145,7 @@ export const ApiKeySetup = ({ onCredentialsSet, credentials }: ApiKeySetupProps)
             <Label htmlFor="sandbox">测试环境</Label>
           </div>
 
-          {isValid && (
+          {verificationStatus.isValid === true && (
             <Alert className="border-success/20 bg-success/10">
               <AlertDescription className="text-success">
                 ✅ API配置已验证，连接成功！
@@ -110,13 +153,42 @@ export const ApiKeySetup = ({ onCredentialsSet, credentials }: ApiKeySetupProps)
             </Alert>
           )}
 
-          <Button 
-            type="submit" 
-            className="w-full gradient-bg hover:opacity-90 transition-opacity"
-            disabled={!formData.apiKey || !formData.secretKey || !formData.passphrase}
-          >
-            连接OKX账户
-          </Button>
+          {verificationStatus.isValid === false && verificationStatus.error && (
+            <Alert className="border-destructive/20 bg-destructive/10">
+              <AlertDescription className="text-destructive">
+                ❌ {verificationStatus.error}
+              </AlertDescription>
+            </Alert>
+          )}
+
+          <div className="space-y-2">
+            {!verificationStatus.isValid && (
+              <Button 
+                type="button"
+                variant="outline"
+                className="w-full"
+                onClick={handleVerify}
+                disabled={!isFormValid || verificationStatus.isVerifying}
+              >
+                {verificationStatus.isVerifying ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    验证中...
+                  </>
+                ) : (
+                  '验证API密钥'
+                )}
+              </Button>
+            )}
+
+            <Button 
+              type="submit" 
+              className="w-full gradient-bg hover:opacity-90 transition-opacity"
+              disabled={!isFormValid || (!verificationStatus.isValid && !verificationStatus.isVerifying)}
+            >
+              {verificationStatus.isValid ? '连接OKX账户' : '验证并连接'}
+            </Button>
+          </div>
         </form>
 
         <div className="mt-4 p-3 bg-muted/50 rounded-lg">

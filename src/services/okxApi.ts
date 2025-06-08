@@ -1,4 +1,3 @@
-
 import axios from 'axios';
 import CryptoJS from 'crypto-js';
 
@@ -91,6 +90,46 @@ class OKXApiService {
       'OK-ACCESS-PASSPHRASE': this.credentials.passphrase,
       'Content-Type': 'application/json',
     };
+  }
+
+  async verifyCredentials(): Promise<{ isValid: boolean; error?: string }> {
+    if (!this.credentials) {
+      return { isValid: false, error: 'API credentials not set' };
+    }
+
+    try {
+      const requestPath = '/api/v5/account/balance';
+      const headers = this.getHeaders('GET', requestPath);
+      
+      const response = await axios.get(`${this.baseURL}${requestPath}`, { 
+        headers,
+        timeout: 10000 // 10 second timeout
+      });
+      
+      if (response.data.code === '0') {
+        return { isValid: true };
+      } else {
+        return { 
+          isValid: false, 
+          error: response.data.msg || 'Invalid API credentials'
+        };
+      }
+    } catch (error: any) {
+      console.error('API verification error:', error);
+      
+      if (error.response?.status === 401) {
+        return { isValid: false, error: 'Invalid API credentials' };
+      } else if (error.response?.status === 403) {
+        return { isValid: false, error: 'API key lacks required permissions' };
+      } else if (error.code === 'ENOTFOUND' || error.code === 'ETIMEDOUT') {
+        return { isValid: false, error: 'Network connection failed' };
+      } else {
+        return { 
+          isValid: false, 
+          error: error.response?.data?.msg || 'API verification failed'
+        };
+      }
+    }
   }
 
   async getMarketData(instId: string = 'BTC-USDT'): Promise<MarketData> {
