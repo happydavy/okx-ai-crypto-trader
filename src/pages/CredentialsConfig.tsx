@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { EyeIcon, EyeOffIcon, Loader2, Save, Trash2, ArrowLeft } from 'lucide-react';
+import { EyeIcon, EyeOffIcon, Loader2, Save, Trash2, ArrowLeft, Play } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { credentialsService, StoredCredentials } from '@/services/credentialsService';
 import { OKXCredentials, okxApi } from '@/services/okxApi';
