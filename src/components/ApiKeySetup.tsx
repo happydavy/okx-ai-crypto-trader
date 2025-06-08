@@ -6,8 +6,10 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { EyeIcon, EyeOffIcon, Loader2 } from 'lucide-react';
+import { EyeIcon, EyeOffIcon, Loader2, Settings } from 'lucide-react';
 import { OKXCredentials, okxApi } from '@/services/okxApi';
+import { credentialsService } from '@/services/credentialsService';
+import { useNavigate } from 'react-router-dom';
 
 interface ApiKeySetupProps {
   onCredentialsSet: (credentials: OKXCredentials) => void;
@@ -30,20 +32,22 @@ export const ApiKeySetup = ({ onCredentialsSet, credentials }: ApiKeySetupProps)
     isVerifying: false,
     isValid: null
   });
+  
+  const navigate = useNavigate();
 
   const handleVerify = async () => {
-    if (!formData.apiKey || !formData.secretKey || !formData.passphrase) {
+    const validation = credentialsService.validateCredentials(formData);
+    if (!validation.isValid) {
       setVerificationStatus({
         isVerifying: false,
         isValid: false,
-        error: '请填写所有必需字段'
+        error: validation.error
       });
       return;
     }
 
     setVerificationStatus({ isVerifying: true, isValid: null });
     
-    // Set credentials temporarily for verification
     okxApi.setCredentials(formData);
     
     try {
@@ -73,7 +77,6 @@ export const ApiKeySetup = ({ onCredentialsSet, credentials }: ApiKeySetupProps)
 
   const handleInputChange = (field: keyof OKXCredentials, value: string | boolean) => {
     setFormData(prev => ({ ...prev, [field]: value }));
-    // Reset verification status when credentials change
     setVerificationStatus({ isVerifying: false, isValid: null });
   };
 
@@ -188,12 +191,22 @@ export const ApiKeySetup = ({ onCredentialsSet, credentials }: ApiKeySetupProps)
             >
               {verificationStatus.isValid ? '连接OKX账户' : '验证并连接'}
             </Button>
+            
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full"
+              onClick={() => navigate('/credentials')}
+            >
+              <Settings className="mr-2 h-4 w-4" />
+              高级配置
+            </Button>
           </div>
         </form>
 
         <div className="mt-4 p-3 bg-muted/50 rounded-lg">
           <p className="text-xs text-muted-foreground">
-            💡 提示：您的API密钥将安全存储在本地浏览器中，不会发送到任何第三方服务器
+            💡 提示：您的API密钥将安全存储在Supabase数据库中，受到行级安全策略保护
           </p>
         </div>
       </CardContent>

@@ -1,9 +1,15 @@
 import { useState, useEffect } from 'react';
+import { AuthWrapper } from '@/components/AuthWrapper';
 import { ApiKeySetup } from '@/components/ApiKeySetup';
 import { TradingDashboard } from '@/components/TradingDashboard';
 import { okxApi, OKXCredentials, MarketData, AccountBalance } from '@/services/okxApi';
 import { quantService, TradingSignal, MarketIndicators } from '@/services/quantService';
+import { credentialsService } from '@/services/credentialsService';
 import { useToast } from '@/hooks/use-toast';
+import { Button } from '@/components/ui/button';
+import { Settings } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { User } from '@supabase/supabase-js';
 
 const Index = () => {
   const [credentials, setCredentials] = useState<OKXCredentials | null>(null);
@@ -12,32 +18,49 @@ const Index = () => {
   const [signal, setSignal] = useState<TradingSignal | null>(null);
   const [indicators, setIndicators] = useState<MarketIndicators | null>(null);
   const [isTrading, setIsTrading] = useState(false);
+  const [loadingCredentials, setLoadingCredentials] = useState(true);
   const { toast } = useToast();
+  const navigate = useNavigate();
 
-  // 从localStorage加载凭证
-  useEffect(() => {
-    const saved = localStorage.getItem('okx-credentials');
-    if (saved) {
-      try {
-        const parsedCredentials = JSON.parse(saved);
-        setCredentials(parsedCredentials);
-        okxApi.setCredentials(parsedCredentials);
-      } catch (error) {
-        console.error('Failed to parse saved credentials:', error);
+  // 从Supabase加载凭证
+  const loadCredentialsFromSupabase = async () => {
+    try {
+      const storedCredentials = await credentialsService.getUserCredentials();
+      if (storedCredentials) {
+        const creds: OKXCredentials = {
+          apiKey: storedCredentials.api_key,
+          secretKey: storedCredentials.secret_key,
+          passphrase: storedCredentials.passphrase,
+          sandbox: storedCredentials.sandbox
+        };
+        setCredentials(creds);
+        okxApi.setCredentials(creds);
       }
+    } catch (error) {
+      console.error('Failed to load credentials from Supabase:', error);
+    } finally {
+      setLoadingCredentials(false);
     }
-  }, []);
+  };
 
   // 设置凭证
-  const handleCredentialsSet = (newCredentials: OKXCredentials) => {
-    setCredentials(newCredentials);
-    okxApi.setCredentials(newCredentials);
-    localStorage.setItem('okx-credentials', JSON.stringify(newCredentials));
-    
-    toast({
-      title: "连接成功",
-      description: "OKX API已连接，开始获取市场数据",
-    });
+  const handleCredentialsSet = async (newCredentials: OKXCredentials) => {
+    try {
+      await credentialsService.saveCredentials(newCredentials);
+      setCredentials(newCredentials);
+      okxApi.setCredentials(newCredentials);
+      
+      toast({
+        title: "连接成功",
+        description: "OKX API已连接并保存到数据库，开始获取市场数据",
+      });
+    } catch (error: any) {
+      toast({
+        title: "保存失败",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
   };
 
   // 获取市场数据
@@ -46,16 +69,13 @@ const Index = () => {
       const data = await okxApi.getMarketData('BTC-USDT');
       setMarketData(data);
       
-      // 更新量化服务的市场数据
       const price = parseFloat(data.last);
       const volume = parseFloat(data.vol24h);
       quantService.addMarketData(price, volume);
       
-      // 生成新的交易信号
       const newSignal = quantService.generateTradingSignal();
       setSignal(newSignal);
       
-      // 获取技术指标
       const newIndicators = quantService.getMarketIndicators();
       setIndicators(newIndicators);
       
@@ -89,7 +109,6 @@ const Index = () => {
         variant: "destructive",
       });
       
-      // 模拟数据用于演示
       setBalance({
         adjEq: "10000",
         details: [{
@@ -127,7 +146,6 @@ const Index = () => {
     setIsTrading(true);
     
     try {
-      // 模拟交易执行（在实际环境中会调用真实的API）
       await new Promise(resolve => setTimeout(resolve, 2000));
       
       toast({
@@ -135,7 +153,6 @@ const Index = () => {
         description: `${action === 'buy' ? '买入' : '卖出'} ${amount.toFixed(4)} BTC`,
       });
       
-      // 更新余额
       fetchBalance();
       
     } catch (error) {
@@ -158,25 +175,46 @@ const Index = () => {
       
       const interval = setInterval(() => {
         fetchMarketData();
-      }, 10000); // 每10秒更新一次
+      }, 10000);
       
       return () => clearInterval(interval);
     }
   }, [credentials]);
 
-  return (
-    <div className="min-h-screen bg-background">
+  const MainContent = ({ user }: { user: User }) => {
+    // 在用户登录后加载凭证
+    useEffect(() => {
+      loadCredentialsFromSupabase();
+    }, [user]);
+
+    return (
       <div className="container mx-auto px-4 py-8">
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold mb-4">
-            <span className="gradient-text">AI量化交易平台</span>
-          </h1>
-          <p className="text-xl text-muted-foreground">
-            智能比特币交易 · 连接OKX交易所 · 专业AI策略
-          </p>
+          <div className="flex justify-between items-start mb-4">
+            <div className="flex-1">
+              <h1 className="text-4xl font-bold mb-4">
+                <span className="gradient-text">AI量化交易平台</span>
+              </h1>
+              <p className="text-xl text-muted-foreground">
+                智能比特币交易 · 连接OKX交易所 · 专业AI策略
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              onClick={() => navigate('/credentials')}
+              className="flex items-center gap-2"
+            >
+              <Settings className="h-4 w-4" />
+              API配置
+            </Button>
+          </div>
         </div>
 
-        {!credentials ? (
+        {loadingCredentials ? (
+          <div className="flex justify-center">
+            <div className="text-muted-foreground">加载配置中...</div>
+          </div>
+        ) : !credentials ? (
           <div className="flex justify-center">
             <ApiKeySetup onCredentialsSet={handleCredentialsSet} />
           </div>
@@ -194,6 +232,14 @@ const Index = () => {
           </div>
         )}
       </div>
+    );
+  };
+
+  return (
+    <div className="min-h-screen bg-background">
+      <AuthWrapper>
+        {(user) => <MainContent user={user} />}
+      </AuthWrapper>
     </div>
   );
 };
