@@ -51,6 +51,11 @@ export const CredentialsConfig = () => {
       }
     } catch (error) {
       console.error('加载凭证失败:', error);
+      toast({
+        title: "加载失败",
+        description: "无法加载现有API凭证",
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }

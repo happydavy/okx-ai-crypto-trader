@@ -5,6 +5,10 @@ import { OKXCredentials } from './okxApi';
 export interface StoredCredentials extends OKXCredentials {
   id: string;
   user_id: string;
+  api_key: string;
+  secret_key: string;
+  passphrase: string;
+  sandbox: boolean;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -21,9 +25,10 @@ export const credentialsService = {
       .select('*')
       .eq('user_id', user.id)
       .eq('is_active', true)
-      .single();
+      .maybeSingle();
 
-    if (error && error.code !== 'PGRST116') {
+    if (error) {
+      console.error('Database error:', error);
       throw error;
     }
 
@@ -55,7 +60,10 @@ export const credentialsService = {
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      console.error('Insert error:', error);
+      throw error;
+    }
     return data;
   },
 
@@ -69,7 +77,10 @@ export const credentialsService = {
       .update({ is_active: false })
       .eq('user_id', user.id);
 
-    if (error) throw error;
+    if (error) {
+      console.error('Delete error:', error);
+      throw error;
+    }
   },
 
   // 验证凭证格式
