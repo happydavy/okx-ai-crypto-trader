@@ -1,3 +1,4 @@
+
 import axios from 'axios';
 import CryptoJS from 'crypto-js';
 
@@ -70,6 +71,36 @@ class OKXApiService {
     }
   }
 
+  private validateCredentialsFormat(credentials: OKXCredentials): { isValid: boolean; error?: string } {
+    // Trim whitespace from all credentials
+    const apiKey = credentials.apiKey.trim();
+    const secretKey = credentials.secretKey.trim();
+    const passphrase = credentials.passphrase.trim();
+
+    // Check if any field is empty
+    if (!apiKey || !secretKey || !passphrase) {
+      return { isValid: false, error: '请确保所有字段都已填写完整' };
+    }
+
+    // OKX API key format validation (typically UUID format)
+    const apiKeyPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!apiKeyPattern.test(apiKey)) {
+      return { isValid: false, error: 'API Key格式不正确，应为UUID格式（例如：12345678-1234-1234-1234-123456789abc）' };
+    }
+
+    // Secret key should be base64 encoded string (typically 44 characters)
+    if (secretKey.length < 20) {
+      return { isValid: false, error: 'Secret Key长度不正确，请检查是否完整复制' };
+    }
+
+    // Passphrase validation (1-30 characters)
+    if (passphrase.length < 1 || passphrase.length > 30) {
+      return { isValid: false, error: 'Passphrase长度应在1-30个字符之间' };
+    }
+
+    return { isValid: true };
+  }
+
   private generateSignature(timestamp: string, method: string, requestPath: string, body: string = ''): string {
     if (!this.credentials) throw new Error('API credentials not set');
     
@@ -91,14 +122,15 @@ class OKXApiService {
     const signature = this.generateSignature(timestamp, method, requestPath, body);
 
     const headers = {
-      'OK-ACCESS-KEY': this.credentials.apiKey,
+      'OK-ACCESS-KEY': this.credentials.apiKey.trim(),
       'OK-ACCESS-SIGN': signature,
       'OK-ACCESS-TIMESTAMP': timestamp,
-      'OK-ACCESS-PASSPHRASE': this.credentials.passphrase,
+      'OK-ACCESS-PASSPHRASE': this.credentials.passphrase.trim(),
       'Content-Type': 'application/json',
     };
 
-    console.log('Request headers:', headers);
+    console.log('Request headers (API Key):', this.credentials.apiKey.trim());
+    console.log('Request headers (Passphrase):', this.credentials.passphrase.trim());
     return headers;
   }
 
@@ -107,7 +139,13 @@ class OKXApiService {
       return { isValid: false, error: 'API credentials not set' };
     }
 
-    console.log('Verifying credentials for API key:', this.credentials.apiKey);
+    // First validate the format
+    const formatValidation = this.validateCredentialsFormat(this.credentials);
+    if (!formatValidation.isValid) {
+      return formatValidation;
+    }
+
+    console.log('Verifying credentials for API key:', this.credentials.apiKey.trim());
 
     try {
       const requestPath = '/api/v5/account/balance';
@@ -127,7 +165,7 @@ class OKXApiService {
       } else {
         return { 
           isValid: false, 
-          error: `API Error: ${response.data.msg || 'Invalid API credentials'} (Code: ${response.data.code})`
+          error: `API错误: ${response.data.msg || 'API密钥验证失败'} (错误代码: ${response.data.code})`
         };
       }
     } catch (error: any) {
@@ -140,7 +178,7 @@ class OKXApiService {
         if (error.response.status === 401) {
           return { 
             isValid: false, 
-            error: `认证失败: ${errorData?.msg || 'API密钥无效或权限不足'}` 
+            error: `认证失败: ${errorData?.msg || 'API密钥不存在或无效，请检查API密钥是否正确复制'}` 
           };
         } else if (error.response.status === 403) {
           return { 
