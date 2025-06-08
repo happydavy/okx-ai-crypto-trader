@@ -1,4 +1,5 @@
 
+
 import axios from 'axios';
 import CryptoJS from 'crypto-js';
 
@@ -30,9 +31,14 @@ export interface TradeOrder {
   instId: string;
   tdMode: 'cash' | 'cross' | 'isolated';
   side: 'buy' | 'sell';
-  ordType: 'market' | 'limit' | 'post_only' | 'fok' | 'ioc';
+  ordType: 'market' | 'limit' | 'post_only' | 'fok' | 'ioc' | 'optimal_limit_ioc';
   sz: string;
   px?: string;
+  ccy?: string;
+  clOrdId?: string;
+  tag?: string;
+  posSide?: 'long' | 'short' | 'net';
+  reduceOnly?: boolean;
 }
 
 export interface AccountBalance {
@@ -237,22 +243,89 @@ class OKXApiService {
     }
   }
 
+  // 根据OKX文档更新的下单方法
   async placeOrder(order: TradeOrder): Promise<any> {
     if (!this.credentials) throw new Error('API credentials not set');
 
     try {
+      // 验证交易模式和产品类型的兼容性
+      this.validateOrderParams(order);
+
       const requestPath = '/api/v5/trade/order';
-      const body = JSON.stringify(order);
+      const orderData = {
+        instId: order.instId,
+        tdMode: order.tdMode,
+        side: order.side,
+        ordType: order.ordType,
+        sz: order.sz,
+        ...(order.px && { px: order.px }),
+        ...(order.ccy && { ccy: order.ccy }),
+        ...(order.clOrdId && { clOrdId: order.clOrdId }),
+        ...(order.tag && { tag: order.tag }),
+        ...(order.posSide && { posSide: order.posSide }),
+        ...(order.reduceOnly !== undefined && { reduceOnly: order.reduceOnly })
+      };
+
+      const body = JSON.stringify(orderData);
       const headers = this.getHeaders('POST', requestPath, body);
       
-      const response = await axios.post(`${this.baseURL}${requestPath}`, order, { headers });
+      console.log('Placing order:', orderData);
+      
+      const response = await axios.post(`${this.baseURL}${requestPath}`, orderData, { headers });
+      
+      console.log('Order response:', response.data);
       
       if (response.data.code === '0') {
         return response.data.data[0];
       }
       throw new Error(response.data.msg || 'Failed to place order');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error placing order:', error);
+      if (error.response) {
+        throw new Error(`订单失败: ${error.response.data.msg || error.message}`);
+      }
+      throw error;
+    }
+  }
+
+  // 验证订单参数的兼容性
+  private validateOrderParams(order: TradeOrder): void {
+    // 对于现货交易，tdMode必须是'cash'
+    if (order.instId.includes('-USDT') || order.instId.includes('-USD')) {
+      if (order.instId.split('-').length === 2) { // 现货对，如BTC-USDT
+        if (order.tdMode !== 'cash') {
+          throw new Error('现货交易必须使用cash交易模式');
+        }
+      }
+    }
+
+    // 对于限价单，必须提供价格
+    if (['limit', 'post_only'].includes(order.ordType) && !order.px) {
+      throw new Error('限价单和只做maker单必须提供价格');
+    }
+
+    // 对于市价单，不应该提供价格
+    if (order.ordType === 'market' && order.px) {
+      throw new Error('市价单不应该提供价格');
+    }
+  }
+
+  // 获取交易账户信息
+  async getTradingAccount(): Promise<any> {
+    if (!this.credentials) throw new Error('API credentials not set');
+
+    try {
+      const requestPath = '/api/v5/account/config';
+      const headers = this.getHeaders('GET', requestPath);
+      
+      const response = await axios.get(`${this.baseURL}${requestPath}`, { headers });
+      
+      if (response.data.code === '0') {
+        return response.data.data[0];
+      }
+      throw new Error('Failed to fetch trading account info');
+    } catch (error) {
+      console.error('Error fetching trading account:', error);
       throw error;
     }
   }
@@ -282,3 +355,4 @@ class OKXApiService {
 }
 
 export const okxApi = new OKXApiService();
+

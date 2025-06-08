@@ -1,12 +1,14 @@
-
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Progress } from '@/components/ui/progress';
-import { Bitcoin, DollarSign, ChartBar, ChartLine } from 'lucide-react';
-import { MarketData, AccountBalance } from '@/services/okxApi';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Bitcoin, DollarSign, ChartBar, ChartLine, Settings } from 'lucide-react';
+import { MarketData, AccountBalance, TradeOrder } from '@/services/okxApi';
 import { TradingSignal, MarketIndicators } from '@/services/quantService';
 
 interface TradingDashboardProps {
@@ -27,12 +29,21 @@ export const TradingDashboard = ({
   isTrading 
 }: TradingDashboardProps) => {
   const [priceChange, setPriceChange] = useState<number>(0);
+  const [tradeMode, setTradeMode] = useState<'cash' | 'cross' | 'isolated'>('cash');
+  const [orderType, setOrderType] = useState<'market' | 'limit'>('market');
+  const [tradeAmount, setTradeAmount] = useState<string>('0.001');
+  const [limitPrice, setLimitPrice] = useState<string>('');
 
   useEffect(() => {
     if (marketData) {
       const change = parseFloat(marketData.last) - parseFloat(marketData.open24h);
       const changePercent = (change / parseFloat(marketData.open24h)) * 100;
       setPriceChange(changePercent);
+      
+      // 自动设置限价单价格为当前价格
+      if (!limitPrice) {
+        setLimitPrice(marketData.last);
+      }
     }
   }, [marketData]);
 
@@ -65,6 +76,13 @@ export const TradingDashboard = ({
     if (rsi < 30) return 'text-success';
     if (rsi > 70) return 'text-destructive';
     return 'text-foreground';
+  };
+
+  const handleCustomTrade = (side: 'buy' | 'sell') => {
+    const amount = parseFloat(tradeAmount);
+    if (amount > 0) {
+      onTrade(side, amount);
+    }
   };
 
   return (
@@ -146,30 +164,90 @@ export const TradingDashboard = ({
 
         <TabsContent value="trading" className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* 买入卖出按钮 */}
+            {/* 交易设置和执行 */}
             <Card className="glass-effect">
               <CardHeader>
-                <CardTitle>快速交易</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                  <Settings className="h-4 w-4" />
+                  交易设置
+                </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="tradeMode">交易模式</Label>
+                    <Select value={tradeMode} onValueChange={(value: any) => setTradeMode(value)}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="cash">现金模式</SelectItem>
+                        <SelectItem value="cross">全仓杠杆</SelectItem>
+                        <SelectItem value="isolated">逐仓杠杆</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="orderType">订单类型</Label>
+                    <Select value={orderType} onValueChange={(value: any) => setOrderType(value)}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="market">市价单</SelectItem>
+                        <SelectItem value="limit">限价单</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="amount">交易数量 (BTC)</Label>
+                  <Input
+                    id="amount"
+                    type="number"
+                    step="0.0001"
+                    min="0.0001"
+                    value={tradeAmount}
+                    onChange={(e) => setTradeAmount(e.target.value)}
+                    placeholder="0.001"
+                  />
+                </div>
+
+                {orderType === 'limit' && (
+                  <div className="space-y-2">
+                    <Label htmlFor="price">限价 (USDT)</Label>
+                    <Input
+                      id="price"
+                      type="number"
+                      step="0.01"
+                      value={limitPrice}
+                      onChange={(e) => setLimitPrice(e.target.value)}
+                      placeholder={marketData?.last || "0"}
+                    />
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-4 mt-6">
                   <Button
-                    onClick={() => onTrade('buy', signal?.quantity || 0.001)}
-                    disabled={isTrading || !signal || signal.action !== 'buy'}
+                    onClick={() => handleCustomTrade('buy')}
+                    disabled={isTrading || !marketData}
                     className="bg-success hover:bg-success/90 text-success-foreground"
                   >
                     {isTrading ? '交易中...' : '买入 BTC'}
                   </Button>
                   <Button
-                    onClick={() => onTrade('sell', signal?.quantity || 0.001)}
-                    disabled={isTrading || !signal || signal.action !== 'sell'}
+                    onClick={() => handleCustomTrade('sell')}
+                    disabled={isTrading || !marketData}
                     className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
                   >
                     {isTrading ? '交易中...' : '卖出 BTC'}
                   </Button>
                 </div>
+
                 {signal && (
-                  <div className="p-3 bg-muted/50 rounded-lg">
+                  <div className="p-3 bg-muted/50 rounded-lg mt-4">
                     <p className="text-sm font-medium">AI建议</p>
                     <p className="text-xs text-muted-foreground mt-1">
                       {signal.reasoning}
@@ -177,6 +255,19 @@ export const TradingDashboard = ({
                     <p className="text-xs text-muted-foreground mt-1">
                       建议数量: {signal.quantity.toFixed(4)} BTC
                     </p>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="mt-2"
+                      onClick={() => {
+                        setTradeAmount(signal.quantity.toString());
+                        if (signal.price && orderType === 'limit') {
+                          setLimitPrice(signal.price.toString());
+                        }
+                      }}
+                    >
+                      使用AI建议
+                    </Button>
                   </div>
                 )}
               </CardContent>
