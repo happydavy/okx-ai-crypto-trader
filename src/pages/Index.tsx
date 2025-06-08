@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { ApiKeySetup } from '@/components/ApiKeySetup';
 import { TradingDashboard } from '@/components/TradingDashboard';
@@ -77,8 +76,19 @@ const Index = () => {
     try {
       const balanceData = await okxApi.getAccountBalance();
       setBalance(balanceData);
+      
+      toast({
+        title: "余额已更新",
+        description: "账户余额信息已刷新",
+      });
     } catch (error) {
       console.error('Error fetching balance:', error);
+      toast({
+        title: "余额获取失败",
+        description: "无法获取账户余额，使用模拟数据",
+        variant: "destructive",
+      });
+      
       // 模拟数据用于演示
       setBalance({
         adjEq: "10000",
@@ -178,6 +188,7 @@ const Index = () => {
               signal={signal}
               indicators={indicators}
               onTrade={handleTrade}
+              onRefreshBalance={fetchBalance}
               isTrading={isTrading}
             />
           </div>

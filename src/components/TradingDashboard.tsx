@@ -7,7 +7,7 @@ import { Progress } from '@/components/ui/progress';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Bitcoin, DollarSign, ChartBar, ChartLine, Settings } from 'lucide-react';
+import { Bitcoin, DollarSign, ChartBar, ChartLine, Settings, RefreshCw } from 'lucide-react';
 import { MarketData, AccountBalance, TradeOrder } from '@/services/okxApi';
 import { TradingSignal, MarketIndicators } from '@/services/quantService';
 
@@ -17,6 +17,7 @@ interface TradingDashboardProps {
   signal: TradingSignal | null;
   indicators: MarketIndicators | null;
   onTrade: (action: 'buy' | 'sell', amount: number) => void;
+  onRefreshBalance?: () => void;
   isTrading: boolean;
 }
 
@@ -25,7 +26,8 @@ export const TradingDashboard = ({
   balance, 
   signal, 
   indicators, 
-  onTrade, 
+  onTrade,
+  onRefreshBalance,
   isTrading 
 }: TradingDashboardProps) => {
   const [priceChange, setPriceChange] = useState<number>(0);
@@ -120,7 +122,20 @@ export const TradingDashboard = ({
         <Card className="glass-effect">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">账户余额</CardTitle>
-            <DollarSign className="h-4 w-4 text-primary" />
+            <div className="flex items-center gap-1">
+              <DollarSign className="h-4 w-4 text-primary" />
+              {onRefreshBalance && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 w-6 p-0"
+                  onClick={onRefreshBalance}
+                  title="刷新余额"
+                >
+                  <RefreshCw className="h-3 w-3" />
+                </Button>
+              )}
+            </div>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
@@ -173,6 +188,40 @@ export const TradingDashboard = ({
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
+                {/* 账户余额显示区域 */}
+                <div className="p-3 bg-muted/50 rounded-lg">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium">账户余额</span>
+                    {onRefreshBalance && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={onRefreshBalance}
+                        className="h-7 px-2"
+                      >
+                        <RefreshCw className="h-3 w-3 mr-1" />
+                        刷新
+                      </Button>
+                    )}
+                  </div>
+                  {balance ? (
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-sm">
+                        <span>总资产:</span>
+                        <span className="font-medium">{formatPrice(balance.totalEq)}</span>
+                      </div>
+                      {balance.details.map((detail, index) => (
+                        <div key={index} className="flex justify-between text-xs text-muted-foreground">
+                          <span>{detail.ccy} 可用:</span>
+                          <span>{formatNumber(detail.availBal, 4)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-sm text-muted-foreground">余额加载中...</div>
+                  )}
+                </div>
+
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="tradeMode">交易模式</Label>
