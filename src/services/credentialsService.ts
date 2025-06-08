@@ -32,7 +32,14 @@ export const credentialsService = {
       throw error;
     }
 
-    return data;
+    if (!data) return null;
+
+    // 转换数据库字段到接口格式
+    return {
+      ...data,
+      apiKey: data.api_key,
+      secretKey: data.secret_key,
+    };
   },
 
   // 保存或更新API凭证
@@ -64,7 +71,13 @@ export const credentialsService = {
       console.error('Insert error:', error);
       throw error;
     }
-    return data;
+
+    // 转换数据库字段到接口格式
+    return {
+      ...data,
+      apiKey: data.api_key,
+      secretKey: data.secret_key,
+    };
   },
 
   // 删除API凭证

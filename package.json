@@ -43,6 +43,7 @@
     "@tanstack/react-query": "^5.56.2",
     "@types/crypto-js": "^4.2.2",
     "@types/ws": "^8.18.1",
+    "@vitest/ui": "^3.2.2",
     "axios": "^1.9.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -64,6 +65,7 @@
     "tailwind-merge": "^2.5.2",
     "tailwindcss-animate": "^1.0.7",
     "vaul": "^0.9.3",
+    "vitest": "^3.2.2",
     "ws": "^8.18.2",
     "zod": "^3.23.8"
   },
