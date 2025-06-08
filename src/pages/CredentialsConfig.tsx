@@ -169,6 +169,13 @@ export const CredentialsConfig = () => {
         </div>
       </div>
 
+      <div className="mb-4">
+        <Button onClick={() => navigate('/api-test')} variant="outline" className="w-full">
+          <Play className="mr-2 h-4 w-4" />
+          前往API测试页面
+        </Button>
+      </div>
+
       <Card className="glass-effect">
         <CardHeader>
           <CardTitle>API 凭证配置</CardTitle>

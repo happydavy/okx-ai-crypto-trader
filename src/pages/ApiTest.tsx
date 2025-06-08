@@ -1,13 +1,17 @@
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import { Loader2, Play, CheckCircle, XCircle, ArrowLeft, Trash2 } from 'lucide-react';
+import { Loader2, Play, CheckCircle, XCircle, ArrowLeft, Trash2, Save, EyeIcon, EyeOffIcon } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useToast } from '@/hooks/use-toast';
 import { credentialsService } from '@/services/credentialsService';
 import { okxApi, OKXCredentials } from '@/services/okxApi';
 
@@ -23,8 +27,75 @@ interface TestLog {
 export const ApiTest = () => {
   const [logs, setLogs] = useState<TestLog[]>([]);
   const [isRunning, setIsRunning] = useState(false);
-  const [credentials, setCredentials] = useState<OKXCredentials | null>(null);
+  const [formData, setFormData] = useState<OKXCredentials>({
+    apiKey: '',
+    secretKey: '',
+    passphrase: '',
+    sandbox: false
+  });
+  const [showSecrets, setShowSecrets] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [hasCredentials, setHasCredentials] = useState(false);
   const navigate = useNavigate();
+  const { toast } = useToast();
+
+  useEffect(() => {
+    loadCredentials();
+  }, []);
+
+  const loadCredentials = async () => {
+    try {
+      const credentials = await credentialsService.getUserCredentials();
+      if (credentials) {
+        setFormData({
+          apiKey: credentials.api_key,
+          secretKey: credentials.secret_key,
+          passphrase: credentials.passphrase,
+          sandbox: credentials.sandbox
+        });
+        setHasCredentials(true);
+      }
+    } catch (error) {
+      console.error('加载凭证失败:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleInputChange = (field: keyof OKXCredentials, value: string | boolean) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleSave = async () => {
+    const validation = credentialsService.validateCredentials(formData);
+    if (!validation.isValid) {
+      toast({
+        title: "验证失败",
+        description: validation.error,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await credentialsService.saveCredentials(formData);
+      toast({
+        title: "保存成功",
+        description: "OKX API凭证已安全保存",
+      });
+      setHasCredentials(true);
+    } catch (error: any) {
+      toast({
+        title: "保存失败",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const addLog = (test: string, status: TestLog['status'], message: string, details?: any) => {
     const log: TestLog = {
@@ -40,32 +111,6 @@ export const ApiTest = () => {
 
   const clearLogs = () => {
     setLogs([]);
-  };
-
-  const loadCredentials = async () => {
-    addLog('凭证加载', 'running', '正在加载API凭证...');
-    try {
-      const creds = await credentialsService.getUserCredentials();
-      if (creds) {
-        setCredentials({
-          apiKey: creds.api_key,
-          secretKey: creds.secret_key,
-          passphrase: creds.passphrase,
-          sandbox: creds.sandbox
-        });
-        addLog('凭证加载', 'success', '成功加载API凭证', {
-          apiKey: creds.api_key.substring(0, 8) + '...',
-          sandbox: creds.sandbox
-        });
-        return creds;
-      } else {
-        addLog('凭证加载', 'error', '未找到保存的API凭证，请先配置API密钥');
-        return null;
-      }
-    } catch (error: any) {
-      addLog('凭证加载', 'error', `加载凭证失败: ${error.message}`);
-      return null;
-    }
   };
 
   const testCredentialValidation = (creds: OKXCredentials) => {
@@ -144,38 +189,33 @@ export const ApiTest = () => {
   };
 
   const runAllTests = async () => {
-    setIsRunning(true);
-    clearLogs();
-
-    // 1. 加载凭证
-    const creds = await loadCredentials();
-    if (!creds) {
-      setIsRunning(false);
+    if (!hasCredentials) {
+      toast({
+        title: "请先配置API",
+        description: "请先保存API凭证再运行测试",
+        variant: "destructive",
+      });
       return;
     }
 
-    const credentialsObj = {
-      apiKey: creds.api_key,
-      secretKey: creds.secret_key,
-      passphrase: creds.passphrase,
-      sandbox: creds.sandbox
-    };
+    setIsRunning(true);
+    clearLogs();
 
-    // 2. 验证格式
-    const isFormatValid = testCredentialValidation(credentialsObj);
+    // 1. 验证格式
+    const isFormatValid = testCredentialValidation(formData);
     if (!isFormatValid) {
       setIsRunning(false);
       return;
     }
 
-    // 3. 测试API连接
-    const isConnectionValid = await testApiConnection(credentialsObj);
+    // 2. 测试API连接
+    const isConnectionValid = await testApiConnection(formData);
     if (!isConnectionValid) {
       setIsRunning(false);
       return;
     }
 
-    // 4. 测试各项功能
+    // 3. 测试各项功能
     await testAccountBalance();
     await testMarketData();
     await testTradingAccount();
@@ -206,21 +246,130 @@ export const ApiTest = () => {
     }
   };
 
+  const isFormValid = formData.apiKey && formData.secretKey && formData.passphrase;
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    );
+  }
+
   return (
     <div className="container mx-auto px-4 py-8 max-w-6xl">
       <div className="mb-6 flex items-center gap-4">
-        <Button variant="outline" onClick={() => navigate('/credentials')}>
+        <Button variant="outline" onClick={() => navigate('/')}>
           <ArrowLeft className="mr-2 h-4 w-4" />
-          返回配置
+          返回首页
         </Button>
         <div>
-          <h1 className="text-2xl font-bold">OKX API 测试工具</h1>
-          <p className="text-muted-foreground">测试您的OKX API连接和功能</p>
+          <h1 className="text-2xl font-bold">OKX API 测试与配置</h1>
+          <p className="text-muted-foreground">配置和测试您的OKX API连接</p>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* 控制面板 */}
+        {/* API配置面板 */}
+        <Card>
+          <CardHeader>
+            <CardTitle>API 配置</CardTitle>
+            <CardDescription>
+              输入您的OKX API凭证
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="apiKey">API Key</Label>
+              <Input
+                id="apiKey"
+                type={showSecrets ? "text" : "password"}
+                value={formData.apiKey}
+                onChange={(e) => handleInputChange('apiKey', e.target.value)}
+                placeholder="输入您的API Key"
+                className="font-mono"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="secretKey">Secret Key</Label>
+              <div className="relative">
+                <Input
+                  id="secretKey"
+                  type={showSecrets ? "text" : "password"}
+                  value={formData.secretKey}
+                  onChange={(e) => handleInputChange('secretKey', e.target.value)}
+                  placeholder="输入您的Secret Key"
+                  className="font-mono pr-10"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="absolute right-0 top-0 h-full px-3"
+                  onClick={() => setShowSecrets(!showSecrets)}
+                >
+                  {showSecrets ? <EyeOffIcon className="h-4 w-4" /> : <EyeIcon className="h-4 w-4" />}
+                </Button>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="passphrase">Passphrase</Label>
+              <Input
+                id="passphrase"
+                type={showSecrets ? "text" : "password"}
+                value={formData.passphrase}
+                onChange={(e) => handleInputChange('passphrase', e.target.value)}
+                placeholder="输入您的Passphrase"
+                className="font-mono"
+              />
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="sandbox"
+                checked={formData.sandbox}
+                onCheckedChange={(checked) => handleInputChange('sandbox', checked)}
+              />
+              <Label htmlFor="sandbox">使用测试环境</Label>
+            </div>
+
+            <Button
+              onClick={handleSave}
+              disabled={!isFormValid || saving}
+              className="w-full"
+            >
+              {saving ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  保存中...
+                </>
+              ) : (
+                <>
+                  <Save className="mr-2 h-4 w-4" />
+                  保存配置
+                </>
+              )}
+            </Button>
+
+            {hasCredentials && (
+              <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                <p className="text-sm text-green-800">
+                  ✅ API凭证已配置，可以开始测试
+                </p>
+              </div>
+            )}
+
+            <div className="p-3 bg-muted/50 rounded-lg">
+              <p className="text-xs text-muted-foreground">
+                💡 提示：您的API密钥将安全存储在Supabase数据库中
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* 测试控制面板 */}
         <Card>
           <CardHeader>
             <CardTitle>测试控制</CardTitle>
@@ -232,7 +381,7 @@ export const ApiTest = () => {
             <div className="flex gap-2">
               <Button 
                 onClick={runAllTests} 
-                disabled={isRunning}
+                disabled={isRunning || !hasCredentials}
                 className="flex-1"
               >
                 {isRunning ? (
@@ -269,20 +418,20 @@ export const ApiTest = () => {
               </AlertDescription>
             </Alert>
 
-            {credentials && (
+            {formData.apiKey && (
               <div className="p-3 bg-muted/50 rounded-lg">
                 <p className="text-sm font-medium mb-2">当前配置:</p>
                 <div className="space-y-1 text-xs">
-                  <p>API Key: {credentials.apiKey.substring(0, 8)}...</p>
-                  <p>环境: {credentials.sandbox ? '测试环境' : '生产环境'}</p>
+                  <p>API Key: {formData.apiKey.substring(0, 8)}...</p>
+                  <p>环境: {formData.sandbox ? '测试环境' : '生产环境'}</p>
                 </div>
               </div>
             )}
           </CardContent>
         </Card>
 
-        {/* 测试日志 */}
-        <Card>
+        {/* 测试日志 - 跨越两列 */}
+        <Card className="lg:col-span-2">
           <CardHeader>
             <CardTitle className="flex items-center justify-between">
               测试日志
@@ -293,7 +442,7 @@ export const ApiTest = () => {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <ScrollArea className="h-[500px] w-full">
+            <ScrollArea className="h-[400px] w-full">
               {logs.length === 0 ? (
                 <div className="flex items-center justify-center h-32 text-muted-foreground">
                   暂无测试日志
