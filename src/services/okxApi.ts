@@ -1,5 +1,3 @@
-
-
 import axios from 'axios';
 import CryptoJS from 'crypto-js';
 
@@ -67,13 +65,13 @@ class OKXApiService {
   private credentials: OKXCredentials | null = null;
 
   constructor() {
-    this.baseURL = 'https://www.okx.com';
+    this.baseURL = 'https://us.okx.com';
   }
 
   setCredentials(credentials: OKXCredentials) {
     this.credentials = credentials;
     if (credentials.sandbox) {
-      this.baseURL = 'https://www.okx.com'; // OKX doesn't have separate sandbox URL
+      this.baseURL = 'https://us.okx.com'; // OKX doesn't have separate sandbox URL
     }
   }
 
@@ -355,4 +353,3 @@ class OKXApiService {
 }
 
 export const okxApi = new OKXApiService();
-
