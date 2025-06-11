@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { AuthWrapper } from '@/components/AuthWrapper';
 import { ApiKeySetup } from '@/components/ApiKeySetup';
@@ -7,7 +8,8 @@ import { quantService, TradingSignal, MarketIndicators } from '@/services/quantS
 import { credentialsService } from '@/services/credentialsService';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
-import { Settings } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Settings, AlertTriangle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { User } from '@supabase/supabase-js';
 
@@ -19,6 +21,7 @@ const Index = () => {
   const [indicators, setIndicators] = useState<MarketIndicators | null>(null);
   const [isTrading, setIsTrading] = useState(false);
   const [loadingCredentials, setLoadingCredentials] = useState(true);
+  const [apiError, setApiError] = useState<string | null>(null);
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -49,6 +52,7 @@ const Index = () => {
       await credentialsService.saveCredentials(newCredentials);
       setCredentials(newCredentials);
       okxApi.setCredentials(newCredentials);
+      setApiError(null); // Clear any previous errors
       
       toast({
         title: "连接成功",
@@ -66,8 +70,10 @@ const Index = () => {
   // 获取市场数据
   const fetchMarketData = async () => {
     try {
+      console.log('Starting to fetch market data...');
       const data = await okxApi.getMarketData('BTC-USDT');
       setMarketData(data);
+      setApiError(null); // Clear error on success
       
       const price = parseFloat(data.last);
       const volume = parseFloat(data.vol24h);
@@ -79,11 +85,14 @@ const Index = () => {
       const newIndicators = quantService.getMarketIndicators();
       setIndicators(newIndicators);
       
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching market data:', error);
+      const errorMessage = error.message || '无法获取市场数据，请检查网络连接';
+      setApiError(errorMessage);
+      
       toast({
         title: "数据获取失败",
-        description: "无法获取市场数据，请检查网络连接",
+        description: errorMessage,
         variant: "destructive",
       });
     }
@@ -94,21 +103,27 @@ const Index = () => {
     if (!credentials) return;
     
     try {
+      console.log('Starting to fetch account balance...');
       const balanceData = await okxApi.getAccountBalance();
       setBalance(balanceData);
+      setApiError(null); // Clear error on success
       
       toast({
         title: "余额已更新",
         description: "账户余额信息已刷新",
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching balance:', error);
+      const errorMessage = error.message || '无法获取账户余额';
+      setApiError(errorMessage);
+      
       toast({
         title: "余额获取失败",
         description: "无法获取账户余额，使用模拟数据",
         variant: "destructive",
       });
       
+      // Set mock balance data
       setBalance({
         adjEq: "10000",
         details: [{
@@ -201,14 +216,31 @@ const Index = () => {
             </div>
             <Button
               variant="outline"
-              onClick={() => navigate('/credentials')}
+              onClick={() => navigate('/api-test')}
               className="flex items-center gap-2"
             >
               <Settings className="h-4 w-4" />
-              API配置
+              API配置与测试
             </Button>
           </div>
         </div>
+
+        {apiError && (
+          <Alert variant="destructive" className="mb-6">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>
+              <strong>API连接问题：</strong> {apiError}
+              <br />
+              <Button 
+                variant="link" 
+                className="p-0 h-auto text-red-600 underline"
+                onClick={() => navigate('/api-test')}
+              >
+                前往API测试页面进行诊断
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
 
         {loadingCredentials ? (
           <div className="flex justify-center">

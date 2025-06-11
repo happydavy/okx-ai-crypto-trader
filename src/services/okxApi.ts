@@ -156,6 +156,7 @@ class OKXApiService {
       const headers = this.getHeaders('GET', requestPath);
       
       console.log('Making verification request to:', `${this.baseURL}${requestPath}`);
+      console.log('Request headers:', { ...headers, 'OK-ACCESS-SIGN': '[HIDDEN]' });
       
       const response = await axios.get(`${this.baseURL}${requestPath}`, { 
         headers,
@@ -174,6 +175,13 @@ class OKXApiService {
       }
     } catch (error: any) {
       console.error('API verification error:', error);
+      console.error('Error details:', {
+        message: error.message,
+        code: error.code,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data
+      });
       
       if (error.response) {
         const errorData = error.response.data;
@@ -197,6 +205,11 @@ class OKXApiService {
         }
       } else if (error.code === 'ENOTFOUND' || error.code === 'ETIMEDOUT') {
         return { isValid: false, error: '网络连接失败，请检查网络设置' };
+      } else if (error.code === 'ERR_NETWORK') {
+        return { 
+          isValid: false, 
+          error: '网络错误：可能是CORS限制。OKX API通常不支持直接从浏览器访问，建议使用服务器端代理或测试工具。'
+        };
       } else {
         return { 
           isValid: false, 
@@ -208,16 +221,23 @@ class OKXApiService {
 
   async getMarketData(instId: string = 'BTC-USDT'): Promise<MarketData> {
     try {
+      console.log('Fetching market data for:', instId);
       const response = await axios.get(`${this.baseURL}/api/v5/market/ticker`, {
-        params: { instId }
+        params: { instId },
+        timeout: 10000
       });
+      
+      console.log('Market data response:', response.data);
       
       if (response.data.code === '0' && response.data.data.length > 0) {
         return response.data.data[0];
       }
       throw new Error('Failed to fetch market data');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching market data:', error);
+      if (error.code === 'ERR_NETWORK') {
+        throw new Error('网络错误：无法连接到OKX服务器，请检查网络连接');
+      }
       throw error;
     }
   }
@@ -229,14 +249,24 @@ class OKXApiService {
       const requestPath = '/api/v5/account/balance';
       const headers = this.getHeaders('GET', requestPath);
       
-      const response = await axios.get(`${this.baseURL}${requestPath}`, { headers });
+      console.log('Fetching account balance from:', `${this.baseURL}${requestPath}`);
+      
+      const response = await axios.get(`${this.baseURL}${requestPath}`, { 
+        headers,
+        timeout: 15000
+      });
+      
+      console.log('Account balance response:', response.data);
       
       if (response.data.code === '0' && response.data.data.length > 0) {
         return response.data.data[0];
       }
       throw new Error('Failed to fetch account balance');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching account balance:', error);
+      if (error.code === 'ERR_NETWORK') {
+        throw new Error('网络错误：无法连接到OKX服务器。OKX API可能不支持直接从浏览器访问（CORS限制）');
+      }
       throw error;
     }
   }
@@ -353,3 +383,5 @@ class OKXApiService {
 }
 
 export const okxApi = new OKXApiService();
+
+}
